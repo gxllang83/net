@@ -27,9 +27,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/http2/hpack"
-	"golang.org/x/net/idna"
-	"golang.org/x/net/lex/httplex"
+	"github.com/phuslu/net/http2/hpack"
+	"github.com/phuslu/net/idna"
+	"github.com/phuslu/net/lex/httplex"
 )
 
 const (
