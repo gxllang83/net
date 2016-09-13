@@ -390,6 +390,35 @@ func (t *Transport) CloseIdleConnections() {
 	}
 }
 
+var errCloseConn = errors.New("http2: CloseConnection called")
+
+// CloseConnections closes any connections which were previously
+// connected from previous requests.
+func (t *Transport) CloseConnection(f func(raddr net.Addr) bool) {
+	if cp, ok := t.connPool().(*clientConnPool); ok {
+		cp.mu.Lock()
+		defer cp.mu.Unlock()
+		// TODO: don't close a cc if it was just added to the pool
+		// milliseconds ago and has never been used. There's currently
+		// a small race window with the HTTP/1 Transport's integration
+		// where it can add an idle conn just before using it, and
+		// somebody else can concurrently call CloseIdleConns and
+		// break some caller's RoundTrip.
+		for _, vv := range cp.conns {
+			for _, cc := range vv {
+				cc.mu.Lock()
+				if f(cc.tconn.RemoteAddr()) {
+					cc.closed = true
+				}
+				cc.mu.Unlock()
+				if cc.closed {
+					cc.tconn.Close()
+				}
+			}
+		}
+	}
+}
+
 var (
 	errClientConnClosed    = errors.New("http2: client conn is closed")
 	errClientConnUnusable  = errors.New("http2: client conn not usable")
