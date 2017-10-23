@@ -20,6 +20,11 @@ type Dialer interface {
 	Dial(network, addr string) (c net.Conn, err error)
 }
 
+// A Resolver is a means to transform hostname.
+type Resolver interface {
+	LookupHost(host string) (addrs []string, err error)
+}
+
 // Auth contains authentication parameters that specific Dialers may require.
 type Auth struct {
 	User, Password string
@@ -37,7 +42,7 @@ func FromEnvironment() Dialer {
 	if err != nil {
 		return Direct
 	}
-	proxy, err := FromURL(proxyURL, Direct)
+	proxy, err := FromURL(proxyURL, Direct, DummyResolver)
 	if err != nil {
 		return Direct
 	}
@@ -68,7 +73,7 @@ func RegisterDialerType(scheme string, f func(*url.URL, Dialer) (Dialer, error))
 
 // FromURL returns a Dialer given a URL specification and an underlying
 // Dialer for it to make network requests.
-func FromURL(u *url.URL, forward Dialer) (Dialer, error) {
+func FromURL(u *url.URL, forward Dialer, resolver Resolver) (Dialer, error) {
 	var auth *Auth
 	if u.User != nil {
 		auth = new(Auth)
@@ -79,8 +84,22 @@ func FromURL(u *url.URL, forward Dialer) (Dialer, error) {
 	}
 
 	switch u.Scheme {
-	case "socks5":
-		return SOCKS5("tcp", u.Host, auth, forward)
+	case "socks5", "socks":
+		return SOCKS5("tcp", u.Host, auth, forward, resolver)
+	case "socks4":
+		return SOCKS4("tcp", u.Host, false, forward, resolver)
+	case "socks4a":
+		return SOCKS4("tcp", u.Host, true, forward, resolver)
+	case "http":
+		return HTTP1("tcp", u.Host, auth, forward, resolver)
+	case "http2":
+		return HTTP2("tcp", u.Host, auth, forward, resolver)
+	case "https":
+		return HTTPS("tcp", u.Host, auth, forward, resolver)
+	case "ssh", "ssh2":
+		return SSH2("tcp", u.Host, auth, forward, resolver)
+	case "quic":
+		return QUIC("udp", u.Host, auth, forward, resolver)
 	}
 
 	// If the scheme doesn't match any of the built-in schemes, see if it
